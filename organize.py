@@ -44,6 +44,8 @@ LOG = logging.getLogger('organize')
 
 def get_episode_info(p):
     """
+    Extract season + episode numbers from a media item path.
+
     :param str p: episode path
 
     :return: season + episode
@@ -69,7 +71,7 @@ def get_episode_info(p):
 
 def get_media(p, m=None):
     """
-    Recursively collect media item paths in a directory.
+    Recursively collect media items in a directory.
 
     :param str p: directory
 
@@ -128,6 +130,15 @@ def get_target_path(source, target):
 
 
 def is_rar_first_volume(r):
+    """
+    Check if a rar file is the first file in the volume, so that
+    it can be extracted.
+
+    :param str r: rar file path
+
+    :return: whether the rar file is the first of the volume
+    :rtype: bool
+    """
     d, _ = os.path.split(r)
 
     ext_counts = defaultdict(int)
@@ -152,6 +163,14 @@ def is_rar_first_volume(r):
 
 
 def is_rar_media_file(r):
+    """
+    Check if a rar archive contains media files.
+
+    :param str r: rar file path
+    
+    :return: whether the rar archive contains media files
+    :rtype: bool
+    """
     has_media = False
 
     rf = RarFile(r)
@@ -277,6 +296,7 @@ def main(**kwargs):
     sources = kwargs.get('sources', [])
     source_media = []
 
+    # use a spinner while we collect media items
     spinner = Spinner('Collecting media... ')
     spinner_q = queue.Queue()
     tr.Thread(target=_collect_spinner, args=(spinner, spinner_q,)).start()
@@ -313,7 +333,7 @@ def main(**kwargs):
         print(json.dumps(jobs, indent=2, sort_keys=True))
         sys.exit(0)
 
-    # create the progress bar
+    # use a progress bar while we organize
     print()
     bar = Bar('Organizing', max=len(jobs))
 
@@ -353,6 +373,7 @@ def main(**kwargs):
     job_q.join()
     bar.finish()
 
+    # print results via prettytable
     if dir_counts:
         table = PrettyTable(field_names=['Directory', 'Items Added'])
         for d, cnt in dir_counts.items():
@@ -360,9 +381,9 @@ def main(**kwargs):
 
         table.sort_by = 'Directory'
 
-        print()
         total = sum(dir_counts.values())
-        print(table.get_string(title=f'Added {total} media items'))
+        print(f'Added {total} media items to {len(dir_counts)} directories.')
+        print(table.get_string())
     else:
         print('no media found')
 
