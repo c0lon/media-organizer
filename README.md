@@ -7,8 +7,7 @@
 usage: organize [-h] --source SOURCES --target TARGET [-m {copy,link,move}]
                 [--serial] [--dry-run]
 
-Scan a directory to find, organize, and add media to the `/tank/media`
-directory.
+Scan a directory to find, organize, and add media to your collection.
 
 optional arguments:
   -h, --help            show this help message and exit
