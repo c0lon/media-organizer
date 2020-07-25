@@ -1,4 +1,4 @@
-#!/bin/env python
+#!/usr/bin/env python
 
 
 import errno
@@ -26,8 +26,12 @@ MEDIA_EXTS = [
 ]
 
 EPISODE_FMTS = [
-    f'[sS](\d+)[eE](\d+)',  # s01e01
-    f'(\d+)[xX](\d+)'       # 1x01
+    r'[sS](\d+)[eE](\d+)',  # s01e01
+    r'(\d+)[xX](\d+)'       # 1x01
+]
+
+SEASON_FMTS = [
+    r'[sS](?:eason ?)?(\d+)',
 ]
 
 
@@ -69,6 +73,47 @@ def get_episode_info(p):
     return season, episode
 
 
+def get_season_number(p):
+    """
+    Extract a season number from a path, if possible.
+
+    :param str p: path to extract season number from
+    
+    :return: whether the directory is season-like
+    :rtype: int
+    :raises: ValueError
+    """
+    d = os.path.basename(p)
+
+    for f in SEASON_FMTS:
+        match = re.search(f, d)
+        if match:
+            return int(match.group(1))
+
+    raise ValueError('not a season: {p}')
+
+
+def is_season_dir(p):
+    """
+    Check if a path is a directory containing a season
+    of media items.
+
+    :param str p: path
+
+    :return: whether the path is a season directory
+    :rtype: bool
+    """
+    if not os.path.isdir(p):
+        return False
+
+    try:
+        get_season_number(p)
+    except ValueError:
+        return False
+
+    return True
+
+
 def get_media(p, m=None):
     """
     Recursively collect media items in a directory.
@@ -86,32 +131,22 @@ def get_media(p, m=None):
 
     for i in os.listdir(p):
         item = os.path.join(p, i)
-        if os.path.isdir(item):
+
+        if is_season_dir(item):
             get_media(item, m)
-            continue
 
-        name, ext = os.path.splitext(item)
-        if ext == '.rar':
-            if not is_media_rar(item):
+        elif os.path.isfile(item):
+            name, ext = os.path.splitext(item)
+
+            if ext == '.rar':
+                if not is_media_rar(item):
+                    continue
+            elif ext not in MEDIA_EXTS:
                 continue
-        elif ext not in MEDIA_EXTS:
-            continue
 
-        m.append(item)
+            m.append(item)
 
     return m
-
-
-def is_season(t):
-    """
-    Check if a directory has a season-like basename.
-
-    :param str t: path to be checked
-    
-    :return: whether the directory is season-like
-    :rtype: bool
-    """
-    return bool(re.match(f'season \d\d', os.path.basename(t)))
 
 
 def get_season_target(t, s):
@@ -121,8 +156,12 @@ def get_season_target(t, s):
 def get_target_path(source, target):
     season, episode = get_episode_info(source)
 
-    if not is_season(target):
+    try:
+        target_season = get_season_number(target)
+    except ValueError:
         target = get_season_target(target, season)
+    else:
+        assert target_season == season
 
     _, ext = os.path.splitext(source)
     filename = f's{season:02}e{episode:02}{ext}'
@@ -281,6 +320,11 @@ def move(s, t):
     shutil.move(s, t)
 
 
+def write_json(j, p, fancy=True):
+    with open(p, 'w+') as f:
+        json.dump(j, f, indent=2, sort_keys=True)
+
+
 def _collect_spinner(s, q):
     while True:
         try:
@@ -329,15 +373,24 @@ def main(**kwargs):
             't': target_item
         })
 
+    job_path = kwargs.get('print_jobs')
+    if job_path:
+        job_path = os.path.abspath(job_path)
+        if os.path.isfile(job_path):
+            r = input(f'{job_path} already exists, overwrite (y/n): ')
+            if r.lower().startswith('y'):
+                write_json(jobs, job_path)
+
     if kwargs.get('dry_run'):
         print(json.dumps(jobs, indent=2, sort_keys=True))
-        sys.exit(0)
+        return
 
     # use a progress bar while we organize
     print()
     bar = Bar('Organizing', max=len(jobs))
 
-    if kwargs.get('serial') is True:
+    # if kwargs.get('serial') is True:
+    if kwargs.get('serial') is True or kwargs.get('mode') == 'COPY':
         for j in jobs:
             organize(j)
             bar.next()
@@ -403,6 +456,7 @@ if __name__ == '__main__':
     p.add_argument('--source', required=True, action='append', dest='sources',
                    help='move files from the given path')
     p.add_argument('--target', required=True, help='organize + move files to the given path')
+    p.add_argument('--print-jobs', help='write organization jobs to a JSON file')
     p.add_argument('-m', '--mode', choices=MODES, default=DEFAULT_MODE)
     p.add_argument('--serial', action='store_true', help='run jobs serially')
     p.add_argument('--dry-run', action='store_true')
@@ -411,4 +465,5 @@ if __name__ == '__main__':
                         filename='organize.log',
                         format='[%(asctime)s] %(msg)s')
 
-    main(**vars(p.parse_args()))
+    args = vars(p.parse_args())
+    sys.exit(main(**args))
