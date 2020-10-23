@@ -40,7 +40,7 @@ MODES = (
     'link',
     'move',
 )
-DEFAULT_MODE = 'move'
+DEFAULT_MODE = 'copy'
 
 
 LOG = logging.getLogger('organize')
